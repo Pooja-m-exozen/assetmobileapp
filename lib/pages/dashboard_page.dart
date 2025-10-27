@@ -1,12 +1,57 @@
-import 'package:flutter/material.dart';
+// ignore_for_file: deprecated_member_use
 
-class DashboardPage extends StatelessWidget {
+import 'package:flutter/material.dart';
+import '../models/asset_models.dart';
+import '../services/asset_api_service.dart';
+
+class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
 
   const DashboardPage({
     super.key,
     required this.userData,
   });
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  List<dynamic> _allSubAssets = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllSubAssets();
+  }
+
+  Future<void> _loadAllSubAssets() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final AssetResponse response = await AssetApiService.fetchAssetsWithSubAssets();
+      
+      // Extract all sub-assets from all main assets
+      List<dynamic> allSubAssets = [];
+      for (var asset in response.assets) {
+        if (asset.subAssets?.immovable != null) {
+          allSubAssets.addAll(asset.subAssets!.immovable!);
+        }
+      }
+      
+      setState(() {
+        _allSubAssets = allSubAssets;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,26 +83,13 @@ class DashboardPage extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Welcome, ${userData['name']?.toString().toUpperCase() ?? 'USER'}',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'ID: ${userData['_id']?.toString().substring(0, 8).toUpperCase() ?? 'N/A'}',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'Welcome, ${widget.userData['name']?.toString().toUpperCase() ?? 'USER'}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                       Row(
@@ -66,7 +98,7 @@ class DashboardPage extends StatelessWidget {
                             radius: 25,
                             backgroundColor: Colors.white,
                             child: Text(
-                              userData['name']?.toString().substring(0, 1).toUpperCase() ?? 'U',
+                              widget.userData['name']?.toString().substring(0, 1).toUpperCase() ?? 'U',
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -101,67 +133,25 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
 
-            // Summary Cards
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildSummaryCard(
-                      icon: Icons.inventory,
-                      count: '0',
-                      label: 'Assets',
-                      color: Colors.green,
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: _buildSummaryCard(
-                      icon: Icons.pending_actions,
-                      count: '2',
-                      label: 'Pending',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: _buildSummaryCard(
-                      icon: Icons.check_circle,
-                      count: '15',
-                      label: 'Completed',
-                      color: Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Recent Activities Section
+            // Sub-Assets Content
             Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Recent Activities',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF00BFFF),
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: 4,
-                        itemBuilder: (context, index) {
-                          return _buildActivityCard(index);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00BFFF)),
+                        ),
+                      )
+                    : _allSubAssets.isEmpty
+                        ? _buildEmptySubAssets()
+                        : ListView.builder(
+                            physics: const BouncingScrollPhysics(),
+                            itemCount: _allSubAssets.length,
+                            itemBuilder: (context, index) {
+                              return _buildSubAssetCard(_allSubAssets[index]);
+                            },
+                          ),
               ),
             ),
 
@@ -171,137 +161,235 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryCard({
-    required IconData icon,
-    required String count,
-    required String label,
-    required Color color,
-  }) {
+  Widget _buildSubAssetCard(dynamic subAsset) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 30,
-            color: color,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            count,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF666666),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityCard(int index) {
-    final activities = [
-      {'type': 'A', 'title': 'Asset Scan - Equipment Check', 'date': '2025-10-21', 'status': 'PENDING'},
-      {'type': 'C', 'title': 'Checklist - Safety Inspection', 'date': '2025-10-18', 'status': 'PENDING'},
-      {'type': 'S', 'title': 'Scanner - QR Code Scan', 'date': '2025-10-14', 'status': 'COMPLETED'},
-      {'type': 'E', 'title': 'Equipment - Maintenance', 'date': '2025-09-29', 'status': 'COMPLETED'},
-    ];
-
-    final activity = activities[index];
-    final isCompleted = activity['status'] == 'COMPLETED';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFF00BFFF).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Center(
-              child: Text(
-                activity['type']!,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF00BFFF),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with name and status
+            Row(
               children: [
-                Text(
-                  activity['title']!,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: subAsset.statusColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: subAsset.statusColor.withOpacity(0.5),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  activity['date']!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF666666),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subAsset.displayName ?? 'Unknown Sub-Asset',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A1A1A),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subAsset.displayId ?? 'N/A',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF666666),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: subAsset.statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    subAsset.displayStatus ?? 'Unknown',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: subAsset.statusColor,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            
+            // Details Grid
+            ..._buildDetailItems(subAsset),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildDetailItems(dynamic subAsset) {
+    List<Widget> items = [];
+    
+    final category = subAsset.category?.toString() ?? '';
+    if (_isValidField(category)) {
+      items.add(_buildDetailItem('Category', category, Icons.category_rounded));
+      items.add(const SizedBox(height: 10));
+    }
+    
+    final brand = subAsset.brand?.toString() ?? '';
+    if (_isValidField(brand)) {
+      items.add(_buildDetailItem('Brand', brand, Icons.business_rounded));
+      items.add(const SizedBox(height: 10));
+    }
+    
+    final model = subAsset.model?.toString() ?? '';
+    if (_isValidField(model)) {
+      items.add(_buildDetailItem('Model', model, Icons.build_rounded));
+      items.add(const SizedBox(height: 10));
+    }
+    
+    final priority = subAsset.priority?.toString() ?? '';
+    if (_isValidField(priority)) {
+      items.add(_buildDetailItem('Priority', priority, Icons.priority_high_rounded));
+      items.add(const SizedBox(height: 10));
+    }
+    
+    final capacity = subAsset.capacity?.toString() ?? '';
+    if (_isValidField(capacity)) {
+      items.add(_buildDetailItem('Capacity', capacity, Icons.straighten_rounded));
+      items.add(const SizedBox(height: 10));
+    }
+    
+    if (items.isNotEmpty) {
+      items.removeLast(); // Remove last SizedBox
+    }
+    
+    return items;
+  }
+
+  bool _isValidField(String? value) {
+    if (value == null || value.isEmpty) return false;
+    final lowerValue = value.toLowerCase().trim();
+    return lowerValue != 'na' && 
+           lowerValue != 'n/a' && 
+           lowerValue != 'null' && 
+           lowerValue != 'none' &&
+           lowerValue != 'undefined';
+  }
+
+  Widget _buildDetailItem(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFF00BFFF).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isCompleted ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              isCompleted ? 'DONE' : 'PENDING',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: isCompleted ? Colors.green : Colors.orange,
+          child: Icon(
+            icon,
+            size: 18,
+            color: const Color(0xFF00BFFF),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF999999),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: Color(0xFF1A1A1A),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptySubAssets() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F8FF),
+              borderRadius: BorderRadius.circular(50),
+              border: Border.all(
+                color: const Color(0xFF00BFFF).withOpacity(0.2),
+                width: 2,
+              ),
+            ),
+            child: const Icon(
+              Icons.extension_outlined,
+              color: Color(0xFF00BFFF),
+              size: 48,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'No Sub-Assets Found',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1A1A1A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Sub-assets from main assets will appear here',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF666666),
             ),
           ),
         ],
@@ -309,3 +397,4 @@ class DashboardPage extends StatelessWidget {
     );
   }
 }
+

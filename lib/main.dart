@@ -7,6 +7,7 @@ import 'pages/dashboard_page.dart';
 import 'pages/scanner_page.dart';
 import 'pages/checklist_page.dart';
 import 'pages/asset_page.dart';
+import 'pages/profile_page.dart';
 import 'services/asset_api_service.dart';
 
 void main() {
@@ -564,7 +565,7 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
-  int _currentIndex = 0;
+  int _currentIndex = 2; // Start at Scanner page (index 2)
 
   final List<Widget> _pages = [
     // Dashboard will be created with userData
@@ -572,6 +573,7 @@ class _MainAppState extends State<MainApp> {
     const SizedBox(), // AssetPage placeholder, will be replaced
     const ScannerPage(),
     const ChecklistPage(),
+    const SizedBox(), // ProfilePage placeholder, will be replaced
   ];
 
   @override
@@ -582,6 +584,7 @@ class _MainAppState extends State<MainApp> {
     // Initialize pages with user data
     _pages[0] = DashboardPage(userData: widget.userData);
     _pages[1] = AssetPage(userData: widget.userData, isViewerMode: false);
+    _pages[4] = ProfilePage(userData: widget.userData);
   }
 
   @override
@@ -627,6 +630,10 @@ class _MainAppState extends State<MainApp> {
             BottomNavigationBarItem(
               icon: Icon(Icons.checklist),
               label: 'Checklist',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person),
+              label: 'Profile',
             ),
           ],
         ),

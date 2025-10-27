@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/asset_models.dart';
 import '../services/asset_api_service.dart';
@@ -24,11 +25,18 @@ class _AssetPageState extends State<AssetPage> {
   List<Asset> _filteredAssets = [];
   bool _isLoading = true;
   String? _errorMessage;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadAssets();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAssets() async {
@@ -58,7 +66,6 @@ class _AssetPageState extends State<AssetPage> {
         final matchesSearch = _searchQuery.isEmpty ||
             asset.displayName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             asset.displayId.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            asset.displayLocation.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             asset.displayCategory.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             asset.displayBrand.toLowerCase().contains(_searchQuery.toLowerCase());
         
@@ -175,7 +182,7 @@ class _AssetPageState extends State<AssetPage> {
                             _filterAssets();
                           },
                           decoration: InputDecoration(
-                            hintText: 'Search assets by name, ID, location...',
+                            hintText: 'Search assets...',
                             hintStyle: const TextStyle(
                               color: Color(0xFF999999),
                               fontSize: 15,
@@ -223,12 +230,32 @@ class _AssetPageState extends State<AssetPage> {
                               ? _buildErrorState()
                               : _filteredAssets.isEmpty
                                   ? _buildEmptyState()
-                                  : ListView.builder(
+                                  : RefreshIndicator(
+                                      onRefresh: _loadAssets,
+                                      color: const Color(0xFF00BFFF),
+                                      child: ListView.builder(
+                                        controller: _scrollController,
+                                        physics: const AlwaysScrollableScrollPhysics(),
                                       itemCount: _filteredAssets.length,
                                       itemBuilder: (context, index) {
                                         final asset = _filteredAssets[index];
-                                        return _buildAssetItem(asset);
-                                      },
+                                          return TweenAnimationBuilder<double>(
+                                            tween: Tween(begin: 0.0, end: 1.0),
+                                            duration: Duration(milliseconds: 300 + (index * 50)),
+                                            curve: Curves.easeOut,
+                                            builder: (context, value, child) {
+                                              return Opacity(
+                                                opacity: value,
+                                                child: Transform.translate(
+                                                  offset: Offset(0, 20 * (1 - value)),
+                                                  child: child,
+                                                ),
+                                              );
+                                            },
+                                            child: _buildAssetItem(asset),
+                                          );
+                                        },
+                                      ),
                                     ),
                     ),
                   ],
@@ -244,6 +271,8 @@ class _AssetPageState extends State<AssetPage> {
   Widget _buildAssetItem(Asset asset) {
     return GestureDetector(
       onTap: () => _showAssetDetails(asset),
+      child: Material(
+        color: Colors.transparent,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
@@ -264,371 +293,177 @@ class _AssetPageState extends State<AssetPage> {
             ),
           ],
         ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Modern Status Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    asset.statusColor.withOpacity(0.12),
-                    asset.statusColor.withOpacity(0.08),
-                    asset.statusColor.withOpacity(0.04),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-              ),
-              child: Row(
+                // Asset Name and Status
+                Row(
                 children: [
-                  Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: asset.statusColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: asset.statusColor.withOpacity(0.4),
-                          blurRadius: 8,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      asset.displayStatus.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 14,
+                        asset.displayName,
+                        style: const TextStyle(
+                          fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: asset.statusColor,
-                        letterSpacing: 1.0,
+                          color: Color(0xFF1A1A1A),
                       ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (asset.hasDigitalAssets == true)
+                    // Simplified status indicator
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                        color: asset.statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.qr_code_2_rounded,
-                            size: 18,
-                            color: Color(0xFF4CAF50),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: asset.statusColor,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                          SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           Text(
-                            'QR',
+                            asset.displayStatus,
                             style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF4CAF50),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: asset.statusColor,
                             ),
                           ),
                         ],
                       ),
                     ),
                 ],
-              ),
-            ),
-            
-            // Enhanced Main Content
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Asset Name with better typography
-                  Text(
-                    asset.displayName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Enhanced Asset ID and Location
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FA),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFFE9ECEF),
-                        width: 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // Asset ID
                         Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00BFFF).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
+                    const Icon(
                                 Icons.tag_rounded,
-                                size: 18,
-                                color: Color(0xFF00BFFF),
+                      size: 14,
+                      color: Color(0xFF999999),
                               ),
-                            ),
-                            const SizedBox(width: 12),
+                    const SizedBox(width: 4),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Asset ID',
-                                    style: TextStyle(
-                                      fontSize: 12,
+                      child: Text(
+                        asset.displayId,
+                        style: const TextStyle(
+                          fontSize: 13,
                                       color: Color(0xFF666666),
                                       fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    asset.displayId,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      color: Color(0xFF1A1A1A),
-                                      fontWeight: FontWeight.w600,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 12),
-                        
-                        Row(
-                          children: [
+                    ),
+                    if (asset.hasDigitalAssets == true)
                             Container(
-                              padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF4CAF50).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Icon(
-                                Icons.location_on_rounded,
-                                size: 18,
+                          Icons.qr_code_2_rounded,
+                          size: 14,
                                 color: Color(0xFF4CAF50),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Location',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF666666),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _formatLocation(asset),
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      color: Color(0xFF1A1A1A),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
+                ),
                   
-                  const SizedBox(height: 16),
-                  
-                  // Enhanced Asset Details Chips
+                const SizedBox(height: 12),
+                
+                  // Asset Details Chips
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildModernChip('Type', asset.displayCategory, Icons.category_rounded, const Color(0xFF9C27B0)),
-                      _buildModernChip('Brand', asset.displayBrand, Icons.business_rounded, const Color(0xFF2196F3)),
-                      if (asset.displayModel.isNotEmpty && asset.displayModel != 'N/A')
-                        _buildModernChip('Model', asset.displayModel, Icons.build_rounded, const Color(0xFFFF9800)),
+                      if (asset.displayCategory.isNotEmpty && asset.displayCategory != 'NA' && asset.displayCategory != 'N/A')
+                        _buildModernChip(asset.displayCategory, Icons.category_rounded, const Color(0xFF9C27B0)),
+                      if (asset.displayBrand.isNotEmpty && asset.displayBrand != 'NA' && asset.displayBrand != 'N/A')
+                        _buildModernChip(asset.displayBrand, Icons.business_rounded, const Color(0xFF2196F3)),
+                      if (asset.displayModel.isNotEmpty && asset.displayModel != 'N/A' && asset.displayModel != 'NA')
+                        _buildModernChip(asset.displayModel, Icons.build_rounded, const Color(0xFFFF9800)),
                     ],
                   ),
-                  
-                  // Enhanced Sub-assets Indicator
+                
+                // Compact Sub-assets Indicator
                   if (asset.subAssets?.immovable?.isNotEmpty == true) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF00BFFF).withOpacity(0.08),
-                            const Color(0xFF00BFFF).withOpacity(0.04),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: const Color(0xFF00BFFF).withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
+                  const SizedBox(height: 10),
+                  Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00BFFF).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
+                      Icon(
                               Icons.subdirectory_arrow_right_rounded,
-                              size: 20,
-                              color: Color(0xFF00BFFF),
+                        size: 16,
+                        color: const Color(0xFF00BFFF),
                             ),
-                          ),
-                          const SizedBox(width: 12),
+                      const SizedBox(width: 6),
                           Text(
                             '${asset.subAssets!.immovable!.length} Sub-assets',
                             style: const TextStyle(
-                              fontSize: 15,
+                          fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF00BFFF),
                             ),
                           ),
                         ],
-                      ),
                     ),
                   ],
                 ],
               ),
             ),
-          ],
         ),
       ),
     );
   }
 
-  // Simple location formatting method for Asset
-  String _formatLocation(Asset asset) {
-    // Clean up displayLocation if it contains JSON-like formatting
-    String location = asset.displayLocation;
-    if (location.contains('{') || location.contains('}') || location.contains('null')) {
-      location = location
-          .replaceAll(RegExp(r'[{}]'), '')
-          .replaceAll('null', '')
-          .replaceAll(',', '')
-          .replaceAll('floor:', '')
-          .replaceAll('room:', '')
-          .replaceAll('building:', '')
-          .trim();
-      
-      if (location.isEmpty) {
-        return 'Location not specified';
-      }
-    }
-    
-    return location;
+  void _showAssetDetails(Asset asset) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: _AssetDetailsDialog(asset: asset),
+      ),
+    );
   }
 
-  // Simple location formatting method for SubAsset
-  String _formatSubAssetLocation(dynamic subAsset) {
-    String location = subAsset.displayLocation ?? '';
-    if (location.contains('{') || location.contains('}') || location.contains('null')) {
-      location = location
-          .replaceAll(RegExp(r'[{}]'), '')
-          .replaceAll('null', '')
-          .replaceAll(',', '')
-          .replaceAll('floor:', '')
-          .replaceAll('room:', '')
-          .replaceAll('building:', '')
-          .trim();
-      
-      if (location.isEmpty) {
-        return 'Location not specified';
-      }
-    }
-    
-    return location;
-  }
 
-  // Modern chip widget with enhanced styling
-  Widget _buildModernChip(String label, String value, IconData icon, Color color) {
+  // Simplified chip widget
+  Widget _buildModernChip(String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.12),
-            color.withOpacity(0.08),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.2),
+          color: color.withOpacity(0.3),
           width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 18,
-            color: color,
-          ),
-          const SizedBox(width: 8),
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
           Text(
-            '$label: $value',
+            value,
             style: TextStyle(
               fontSize: 13,
               color: color,
@@ -642,19 +477,29 @@ class _AssetPageState extends State<AssetPage> {
 
 
   Widget _buildLoadingState() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
+          const CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00BFFF)),
+            strokeWidth: 3,
           ),
-          SizedBox(height: 16),
-          Text(
+          const SizedBox(height: 16),
+          const Text(
             'Loading assets...',
             style: TextStyle(
               fontSize: 16,
               color: Color(0xFF666666),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Please wait',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[400],
             ),
           ),
         ],
@@ -770,19 +615,20 @@ class _AssetPageState extends State<AssetPage> {
       ),
     );
   }
+}
 
-  void _showAssetDetails(Asset asset) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Container(
-          width: double.infinity,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
+// Dialog for asset details
+class _AssetDetailsDialog extends StatelessWidget {
+  final Asset asset;
+
+  const _AssetDetailsDialog({required this.asset});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.85;
+    
+    return Container(
+      constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
@@ -793,22 +639,77 @@ class _AssetPageState extends State<AssetPage> {
                 offset: const Offset(0, 15),
                 spreadRadius: 0,
               ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-                spreadRadius: 0,
-              ),
             ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Enhanced Header with gradient
-              Container(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+          // Header
+          _buildHeader(context),
+          
+          // Scrollable Content
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status Badge
+                  _buildStatusBadge(context),
+                  const SizedBox(height: 24),
+                  
+                  // Basic Information Section
+                  _buildModalSection(
+                    context,
+                    'Basic Information',
+                    Icons.info_outline_rounded,
+                    [
+                        _buildDetailRow(context, 'Asset ID', asset.displayId, Icons.tag_rounded),
+                        _buildDetailRow(context, 'Type', asset.displayCategory, Icons.category_rounded),
+                        _buildDetailRow(context, 'Brand', asset.displayBrand, Icons.business_rounded),
+                        if (asset.displayModel.isNotEmpty && asset.displayModel != 'N/A' && asset.displayModel != 'NA')
+                          _buildDetailRow(context, 'Model', asset.displayModel, Icons.build_rounded),
+                        if (asset.capacity?.isNotEmpty == true && asset.capacity != 'NA' && asset.capacity != 'N/A')
+                          _buildDetailRow(context, 'Capacity', asset.capacity!, Icons.straighten_rounded),
+                        if (asset.priority != null && asset.priority!.isNotEmpty && asset.priority != 'NA' && asset.priority != 'N/A')
+                          _buildDetailRow(context, 'Priority', asset.priority!, Icons.priority_high_rounded),
+                        if (asset.description?.isNotEmpty == true)
+                          _buildDetailRow(context, 'Description', asset.description!, Icons.description_rounded),
+                    ],
+                  ),
+                  
+                  // Sub-assets Section
+                  if (asset.subAssets?.immovable?.isNotEmpty == true) ...[
+                    const SizedBox(height: 24),
+                    _buildModalSection(
+                      context,
+                      'Sub-Assets',
+                      Icons.subdirectory_arrow_right_rounded,
+                      asset.subAssets!.immovable!.map((subAsset) => 
+                        _buildSubAssetCard(context, subAsset)
+                      ).toList(),
+                    ),
+                  ],
+                  
+                  // Action Buttons
+                  const SizedBox(height: 24),
+                  _buildActionButtons(context),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
@@ -816,26 +717,13 @@ class _AssetPageState extends State<AssetPage> {
                       Color(0xFF87CEEB),
                     ],
                   ),
-                  borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(24),
                     topRight: Radius.circular(24),
                   ),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.inventory_2_outlined,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -843,146 +731,201 @@ class _AssetPageState extends State<AssetPage> {
                           const Text(
                             'Asset Details',
                             style: TextStyle(
-                              fontSize: 20,
+                    fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                const SizedBox(height: 6),
                           Text(
                             asset.displayName,
                             style: const TextStyle(
-                              fontSize: 14,
+                    fontSize: 15,
                               color: Colors.white70,
+                    fontWeight: FontWeight.w500,
                             ),
-                            maxLines: 1,
+                  maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
+          const SizedBox(width: 12),
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withOpacity(0.25),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
                           Icons.close_rounded,
                           color: Colors.white,
-                          size: 20,
+                size: 24,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              
-              // Content
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context) {
+    return Row(
                     children: [
-                      // Status Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        Expanded(
+          child: _buildActionButton(
+            context,
+            'PO',
+            Icons.description_rounded,
+            const Color(0xFF2196F3),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildActionButton(
+            context,
+            'LifeCycle',
+            Icons.timeline_rounded,
+            const Color(0xFF4CAF50),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildActionButton(
+            context,
+            'Replace',
+            Icons.swap_horiz_rounded,
+            const Color(0xFFFF9800),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(BuildContext context, String label, IconData icon, Color color) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          _showComingSoonModal(context, label, icon, color);
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: asset.statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: asset.statusColor.withOpacity(0.3),
+              color: color.withOpacity(0.2),
                             width: 1,
                           ),
                         ),
-                        child: Row(
+          child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: asset.statusColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
+              Icon(icon, color: color, size: 24),
+              const SizedBox(height: 6),
                             Text(
-                              asset.displayStatus.toUpperCase(),
+                label,
                               style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: asset.statusColor,
-                                letterSpacing: 0.5,
+                  fontWeight: FontWeight.w600,
+                  color: color,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Basic Information Section
-                      _buildModalSection(
-                        'Basic Information',
-                        Icons.info_outline_rounded,
-                        [
-                          _buildModalDetailRow('Asset ID', asset.displayId, Icons.tag_rounded),
-                          _buildModalDetailRow('Type', asset.displayCategory, Icons.category_rounded),
-                          _buildModalDetailRow('Brand', asset.displayBrand, Icons.business_rounded),
-                          if (asset.displayModel.isNotEmpty && asset.displayModel != 'N/A')
-                            _buildModalDetailRow('Model', asset.displayModel, Icons.build_rounded),
-                          if (asset.capacity?.isNotEmpty == true && asset.capacity != 'NA')
-                            _buildModalDetailRow('Capacity', asset.capacity!, Icons.straighten_rounded),
-                          _buildModalDetailRow('Location', _formatLocation(asset), Icons.location_on_rounded),
-                          _buildModalDetailRow('Priority', asset.priority ?? 'N/A', Icons.priority_high_rounded),
-                          if (asset.description?.isNotEmpty == true)
-                            _buildModalDetailRow('Description', asset.description!, Icons.description_rounded),
-                        ],
-                      ),
-                      
-                      // Sub-assets Section
-                      if (asset.subAssets?.immovable?.isNotEmpty == true) ...[
-                        const SizedBox(height: 24),
-                        _buildModalSection(
-                          'Sub-Assets',
-                          Icons.subdirectory_arrow_right_rounded,
-                          asset.subAssets!.immovable!.map((subAsset) => 
-                            _buildSubAssetCard(subAsset)
-                          ).toList(),
-                        ),
-                      ],
-                    ],
-                  ),
+      ),
+    );
+  }
+
+  void _showComingSoonModal(BuildContext context, String feature, IconData icon, Color color) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 320),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 15),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon Circle
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 40,
                 ),
               ),
-              
-              // Enhanced Close Button
-              Container(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                child: SizedBox(
+              const SizedBox(height: 20),
+              Text(
+                feature,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Coming Soon',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'This feature is under development and will be available soon.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00BFFF),
+                    backgroundColor: color,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 0,
-                      shadowColor: Colors.transparent,
                     ),
                     child: const Text(
-                      'Close',
+                    'Got it',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                      ),
                     ),
                   ),
                 ),
@@ -994,8 +937,45 @@ class _AssetPageState extends State<AssetPage> {
     );
   }
 
-  // Enhanced modal section widget
-  Widget _buildModalSection(String title, IconData icon, List<Widget> children) {
+  Widget _buildStatusBadge(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: asset.statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: asset.statusColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: asset.statusColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            asset.displayStatus.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: asset.statusColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildModalSection(BuildContext context, String title, IconData icon, List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFF8F9FA),
@@ -1047,8 +1027,7 @@ class _AssetPageState extends State<AssetPage> {
     );
   }
 
-  // Enhanced modal detail row widget
-  Widget _buildModalDetailRow(String label, String value, IconData icon) {
+  Widget _buildDetailRow(BuildContext context, String label, String value, IconData icon) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -1104,8 +1083,22 @@ class _AssetPageState extends State<AssetPage> {
     );
   }
 
-  // Enhanced sub-asset card widget
-  Widget _buildSubAssetCard(dynamic subAsset) {
+  Widget _buildSubAssetCard(BuildContext context, dynamic subAsset) {
+    String location = subAsset.displayLocation ?? '';
+    if (location.contains('{') || location.contains('}') || location.contains('null')) {
+      location = location
+          .replaceAll(RegExp(r'[{}]'), '')
+          .replaceAll('null', '')
+          .replaceAll(',', '')
+          .replaceAll('floor:', '')
+          .replaceAll('room:', '')
+          .replaceAll('building:', '')
+          .trim();
+      
+      if (location.isEmpty) {
+        return Container();
+      }
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -1145,7 +1138,7 @@ class _AssetPageState extends State<AssetPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '${subAsset.displayId} • ${_formatSubAssetLocation(subAsset)}',
+            '${subAsset.displayId} • $location',
             style: const TextStyle(
               fontSize: 12,
               color: Color(0xFF666666),
