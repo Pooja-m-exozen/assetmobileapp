@@ -314,6 +314,21 @@ class _ScannerPageState extends State<ScannerPage> {
           continue;
         }
         
+        // If value is a Map, create separate cards for each key-value pair
+        if (value is Map) {
+          value.forEach((key, val) {
+            if (val != null && val.toString().isNotEmpty && 
+                val.toString().toLowerCase() != 'na' && 
+                val.toString().toLowerCase() != 'n/a') {
+              String subKey = key.toString();
+              String subValue = val.toString();
+              String subLabel = _getFieldLabel(subKey);
+              infoItems.add(_buildSimpleInfoCard(subLabel, subValue));
+            }
+          });
+          continue;
+        }
+        
         // Handle different value types
         String displayValue = _formatValue(value);
         
@@ -583,21 +598,14 @@ class _ScannerPageState extends State<ScannerPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header Section (like dashboard)
+            // Header Section
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF00BFFF),
-                    Color(0xFF87CEEB),
-                  ],
-                ),
+                color: Color(0xFF00BFFF),
                 borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
                 ),
               ),
               child: Column(
@@ -1099,9 +1107,7 @@ class _ScannerPageState extends State<ScannerPage> {
               width: double.infinity,
               height: 50,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF00BFFF), Color(0xFF1E90FF)],
-                ),
+                color: const Color(0xFF00BFFF),
                 borderRadius: BorderRadius.circular(25),
               ),
               child: ElevatedButton(
@@ -1113,9 +1119,9 @@ class _ScannerPageState extends State<ScannerPage> {
                     borderRadius: BorderRadius.circular(25),
                   ),
                 ),
-                child: Text(
+                child: const Text(
                   'Start Scanning',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,

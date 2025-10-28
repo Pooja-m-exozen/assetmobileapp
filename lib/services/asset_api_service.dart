@@ -27,10 +27,33 @@ class AssetApiService {
     return headers;
   }
   
-  static Future<AssetResponse> fetchAssetsWithSubAssets() async {
+  static Future<AssetResponse> fetchAssetsWithSubAssets({
+    int page = 1,
+    int limit = 10,
+    String? search,
+    String? status,
+    String? category,
+  }) async {
     try {
+      final Map<String, String> queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+      
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+      if (status != null && status.isNotEmpty && status != 'All') {
+        queryParams['status'] = status;
+      }
+      if (category != null && category.isNotEmpty && category != 'All') {
+        queryParams['category'] = category;
+      }
+
+      final uri = Uri.parse('$baseUrl/assets').replace(queryParameters: queryParams);
+      
       final response = await http.get(
-        Uri.parse('$baseUrl/assets'),
+        uri,
         headers: _getHeaders(),
       );
 

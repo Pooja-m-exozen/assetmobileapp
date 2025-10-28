@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use, avoid_print
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -21,11 +21,17 @@ class AssetPage extends StatefulWidget {
 
 class _AssetPageState extends State<AssetPage> {
   String _searchQuery = '';
-  List<Asset> _assets = [];
+  List<Asset> _allAssets = [];
   List<Asset> _filteredAssets = [];
   bool _isLoading = true;
   String? _errorMessage;
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  String? _selectedAssetName;
+  
+  List<String> get _assetNames {
+    return _allAssets.map((asset) => asset.displayName).toSet().toList()..sort();
+  }
 
   @override
   void initState() {
@@ -36,6 +42,7 @@ class _AssetPageState extends State<AssetPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -46,13 +53,53 @@ class _AssetPageState extends State<AssetPage> {
     });
 
     try {
-      final AssetResponse response = await AssetApiService.fetchAssetsWithSubAssets();
+      List<Asset> allAssets = [];
+      int currentPage = 1;
+      bool hasMorePages = true;
+      int? totalPages;
+      
+      print('Loading all assets from asset_page...');
+      
+      // Load all pages
+      while (hasMorePages) {
+        print('Fetching page $currentPage...');
+        
+        final AssetResponse response = await AssetApiService.fetchAssetsWithSubAssets(
+          page: currentPage,
+          limit: 10,
+        );
+        
+        print('Page $currentPage: Received ${response.assets.length} assets');
+        allAssets.addAll(response.assets);
+        
+        // Check if there are more pages
+        if (response.pagination != null) {
+          totalPages = response.pagination!.pages;
+          print('Pagination - Page: ${response.pagination!.page}, Total pages: $totalPages, Total assets: ${response.pagination!.total}');
+          hasMorePages = currentPage < totalPages;
+        } else {
+          print('No pagination info available');
+          hasMorePages = false;
+        }
+        
+        currentPage++;
+        
+        // Safety check
+        if (currentPage > 10) {
+          print('Safety limit reached. Stopping pagination.');
+          hasMorePages = false;
+        }
+      }
+      
+      print('Completed loading all assets. Total: ${allAssets.length}');
+      
       setState(() {
-        _assets = response.assets;
-        _filteredAssets = _assets;
+        _allAssets = allAssets;
+        _filteredAssets = allAssets;
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading assets: $e');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -61,17 +108,38 @@ class _AssetPageState extends State<AssetPage> {
   }
 
   void _filterAssets() {
-    setState(() {
-      _filteredAssets = _assets.where((asset) {
-        final matchesSearch = _searchQuery.isEmpty ||
-            asset.displayName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+    List<Asset> filtered = _allAssets;
+    
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((asset) {
+        return asset.displayName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             asset.displayId.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             asset.displayCategory.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             asset.displayBrand.toLowerCase().contains(_searchQuery.toLowerCase());
-        
-        return matchesSearch;
       }).toList();
+    }
+    
+    // Apply asset name filter
+    if (_selectedAssetName != null && _selectedAssetName!.isNotEmpty) {
+      filtered = filtered.where((asset) {
+        return asset.displayName == _selectedAssetName;
+      }).toList();
+    }
+    
+    setState(() {
+      _filteredAssets = filtered;
     });
+  }
+
+  int _getTotalSubAssets() {
+    int total = 0;
+    for (var asset in _allAssets) {
+      if (asset.subAssets?.immovable != null) {
+        total += asset.subAssets!.immovable!.length;
+      }
+    }
+    return total;
   }
 
   @override
@@ -85,14 +153,7 @@ class _AssetPageState extends State<AssetPage> {
             Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF00BFFF),
-                    Color(0xFF87CEEB),
-                  ],
-                ),
+                color: Color(0xFF00BFFF),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(24),
                   bottomRight: Radius.circular(24),
@@ -109,9 +170,9 @@ class _AssetPageState extends State<AssetPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                widget.isViewerMode ? 'Asset Viewer' : 'Asset Management',
+                                'Welcome, ${widget.userData['name']?.toString().toUpperCase() ?? 'USER'}',
                                 style: const TextStyle(
-                                  fontSize: 22,
+                                  fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
@@ -127,17 +188,40 @@ class _AssetPageState extends State<AssetPage> {
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            widget.isViewerMode ? Icons.visibility : Icons.inventory_2,
-                            color: Colors.white,
-                            size: 22,
-                          ),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 25,
+                              backgroundColor: Colors.white,
+                              child: Text(
+                                widget.userData['name']?.toString().substring(0, 1).toUpperCase() ?? 'U',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF00BFFF),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            GestureDetector(
+                              onTap: () {
+                                // Navigate back to login page
+                                Navigator.of(context).pushReplacementNamed('/');
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.logout,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -146,99 +230,293 @@ class _AssetPageState extends State<AssetPage> {
               ),
             ),
             
-            // Enhanced Content
+            // Scrollable Content (everything below header)
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Column(
-                  children: [
-                    // Enhanced Search (for viewer mode only)
-                    if (widget.isViewerMode) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                              spreadRadius: 0,
+              child: RefreshIndicator(
+                onRefresh: _loadAssets,
+                color: const Color(0xFF00BFFF),
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                        child: Column(
+                          children: [
+                            // Search and Filter in Single Row
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.04),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: TextField(
+                                      controller: _searchController,
+                                      onChanged: (value) {
+                                        _searchQuery = value;
+                                        _filterAssets();
+                                      },
+                                      decoration: InputDecoration(
+                                        hintText: 'Search...',
+                                        hintStyle: const TextStyle(
+                                          color: Color(0xFF999999),
+                                          fontSize: 14,
+                                        ),
+                                        prefixIcon: const Padding(
+                                          padding: EdgeInsets.all(10),
+                                          child: Icon(
+                                            Icons.search_rounded,
+                                            color: Color(0xFF00BFFF),
+                                            size: 20,
+                                          ),
+                                        ),
+                                        suffixIcon: _searchController.text.isNotEmpty
+                                            ? IconButton(
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(() {
+                                                    _searchQuery = '';
+                                                  });
+                                                  _filterAssets();
+                                                },
+                                                icon: const Icon(
+                                                  Icons.clear_rounded,
+                                                  color: Color(0xFF999999),
+                                                  size: 18,
+                                                ),
+                                              )
+                                            : null,
+                                        border: InputBorder.none,
+                                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.04),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: DropdownButton<String?>(
+                                      value: _selectedAssetName,
+                                      isExpanded: true,
+                                      isDense: false,
+                                      underline: Container(),
+                                      menuMaxHeight: 200, // Limit visible items to ~4
+                                      hint: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 12),
+                                        child: Text(
+                                          'All Assets',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Color(0xFF666666),
+                                          ),
+                                        ),
+                                      ),
+                                      icon: const Padding(
+                                        padding: EdgeInsets.only(right: 8),
+                                        child: Icon(
+                                          Icons.arrow_drop_down_rounded,
+                                          color: Color(0xFF00BFFF),
+                                          size: 24,
+                                        ),
+                                      ),
+                                      dropdownColor: Colors.white,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF1A1A1A),
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem<String?>(
+                                          value: null,
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(horizontal: 12),
+                                            child: Text('All Assets'),
+                                          ),
+                                        ),
+                                        ..._assetNames.map((String name) {
+                                          return DropdownMenuItem<String?>(
+                                            value: name,
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                                              child: Text(
+                                                name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                      onChanged: (String? newValue) {
+                                        setState(() {
+                                          _selectedAssetName = newValue;
+                                        });
+                                        _filterAssets();
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                              spreadRadius: 0,
+                            const SizedBox(height: 12),
+                            
+                            // Asset Count Cards
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF00BFFF),
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF00BFFF).withOpacity(0.2),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.2),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Icon(
+                                            Icons.inventory_2_rounded,
+                                            color: Colors.white,
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Total Assets',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white.withOpacity(0.9),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${_allAssets.length}',
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFC107),
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFFFFC107).withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.3),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Icon(
+                                            Icons.subdirectory_arrow_right_rounded,
+                                            color: Colors.white,
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Total Sub-assets',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white.withOpacity(0.95),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${_getTotalSubAssets()}',
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        child: TextField(
-                          onChanged: (value) {
-                            setState(() {
-                              _searchQuery = value;
-                            });
-                            _filterAssets();
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'Search assets...',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF999999),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            prefixIcon: Container(
-                              padding: const EdgeInsets.all(12),
-                              child: const Icon(
-                                Icons.search_rounded,
-                                color: Color(0xFF00BFFF),
-                                size: 22,
-                              ),
-                            ),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchQuery = '';
-                                      });
-                                      _filterAssets();
-                                    },
-                                    icon: const Icon(
-                                      Icons.clear_rounded,
-                                      color: Color(0xFF999999),
-                                      size: 20,
-                                    ),
-                                  )
-                                : null,
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                        ),
                       ),
-                      const SizedBox(height: 24),
-                    ],
-                    
-                    
-                    const SizedBox(height: 20),
+                    ),
                     
                     // Content based on state
-                    Expanded(
-                      child: _isLoading
-                          ? _buildLoadingState()
-                          : _errorMessage != null
-                              ? _buildErrorState()
-                              : _filteredAssets.isEmpty
-                                  ? _buildEmptyState()
-                                  : RefreshIndicator(
-                                      onRefresh: _loadAssets,
-                                      color: const Color(0xFF00BFFF),
-                                      child: ListView.builder(
-                                        controller: _scrollController,
-                                        physics: const AlwaysScrollableScrollPhysics(),
-                                      itemCount: _filteredAssets.length,
-                                      itemBuilder: (context, index) {
-                                        final asset = _filteredAssets[index];
+                    _isLoading
+                        ? SliverFillRemaining(child: _buildLoadingState())
+                        : _errorMessage != null
+                            ? SliverFillRemaining(child: _buildErrorState())
+                            : _filteredAssets.isEmpty
+                                ? SliverFillRemaining(child: _buildEmptyState())
+                                : SliverPadding(
+                                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                                    sliver: SliverList(
+                                      delegate: SliverChildBuilderDelegate(
+                                        (context, index) {
+                                          final asset = _filteredAssets[index];
                                           return TweenAnimationBuilder<double>(
                                             tween: Tween(begin: 0.0, end: 1.0),
                                             duration: Duration(milliseconds: 300 + (index * 50)),
@@ -255,9 +533,10 @@ class _AssetPageState extends State<AssetPage> {
                                             child: _buildAssetItem(asset),
                                           );
                                         },
+                                        childCount: _filteredAssets.length,
                                       ),
                                     ),
-                    ),
+                                  ),
                   ],
                 ),
               ),
@@ -559,6 +838,8 @@ class _AssetPageState extends State<AssetPage> {
   }
 
   Widget _buildEmptyState() {
+    final hasActiveFilters = _searchQuery.isNotEmpty || _selectedAssetName != null;
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -573,44 +854,68 @@ class _AssetPageState extends State<AssetPage> {
                 width: 2,
               ),
             ),
-            child: const Icon(
-              Icons.inventory_2_outlined,
-              color: Color(0xFF00BFFF),
+            child: Icon(
+              hasActiveFilters ? Icons.filter_alt_outlined : Icons.inventory_2_outlined,
+              color: const Color(0xFF00BFFF),
               size: 48,
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'No Assets Found',
-            style: TextStyle(
+          Text(
+            hasActiveFilters ? 'No Matching Assets' : 'No Assets Found',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: Color(0xFF1A1A1A),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Try adjusting your search or check your connection',
+          Text(
+            hasActiveFilters 
+                ? 'Try adjusting your search or filter settings'
+                : 'Check your connection or try again',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
               color: Color(0xFF666666),
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _loadAssets,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Refresh'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00BFFF),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          if (hasActiveFilters)
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _searchQuery = '';
+                  _selectedAssetName = null;
+                  _searchController.clear();
+                });
+                _filterAssets();
+              },
+              icon: const Icon(Icons.clear_all, size: 18),
+              label: const Text('Clear Filters'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00BFFF),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            )
+          else
+            ElevatedButton.icon(
+              onPressed: _loadAssets,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Refresh'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00BFFF),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -709,14 +1014,7 @@ class _AssetDetailsDialog extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 16, 16),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF00BFFF),
-                      Color(0xFF87CEEB),
-                    ],
-                  ),
+        color: Color(0xFF00BFFF),
         borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(24),
                     topRight: Radius.circular(24),

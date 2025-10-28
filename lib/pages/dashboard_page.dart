@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use, avoid_print, prefer_final_fields
 
 import 'package:flutter/material.dart';
 import '../models/asset_models.dart';
@@ -18,12 +18,31 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   List<dynamic> _allSubAssets = [];
+  List<dynamic> _filteredSubAssets = [];
   bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+  String? _selectedAssetName;
+  Map<String, String> _subAssetToParentMap = {}; // Maps sub-asset to parent asset name
+  
+  List<String> get _assetNames {
+    return _subAssetToParentMap.values.toSet().toList()..sort();
+  }
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_onSearchChanged);
     _loadAllSubAssets();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _filterAndPageAssets();
   }
 
   Future<void> _loadAllSubAssets() async {
@@ -32,25 +51,121 @@ class _DashboardPageState extends State<DashboardPage> {
     });
 
     try {
-      final AssetResponse response = await AssetApiService.fetchAssetsWithSubAssets();
-      
-      // Extract all sub-assets from all main assets
       List<dynamic> allSubAssets = [];
-      for (var asset in response.assets) {
-        if (asset.subAssets?.immovable != null) {
-          allSubAssets.addAll(asset.subAssets!.immovable!);
+      int currentPage = 1;
+      bool hasMorePages = true;
+      int? totalPages;
+      
+      print('Starting to load all sub-assets...');
+      
+      // Load all pages
+      while (hasMorePages) {
+        print('Fetching page $currentPage...');
+        
+        final AssetResponse response = await AssetApiService.fetchAssetsWithSubAssets(
+          page: currentPage,
+          limit: 10, // Match server's default limit
+        );
+        
+        print('Page $currentPage: Received ${response.assets.length} main assets');
+        
+        // Extract all sub-assets from this page and track parent asset names
+        int subAssetsInPage = 0;
+        for (var asset in response.assets) {
+          if (asset.subAssets?.immovable != null) {
+            final subAssets = asset.subAssets!.immovable!;
+            final parentAssetName = asset.assetName ?? 'Unknown';
+            
+            for (var subAsset in subAssets) {
+              allSubAssets.add(subAsset);
+              // Map sub-asset ID to parent asset name
+              final subAssetId = subAsset.id?.toString() ?? 
+                                 subAsset.tagId?.toString() ?? 
+                                 'unknown';
+              _subAssetToParentMap[subAssetId] = parentAssetName;
+            }
+            subAssetsInPage += subAssets.length;
+          }
+        }
+        
+        print('Page $currentPage: Extracted $subAssetsInPage sub-assets');
+        print('Total sub-assets so far: ${allSubAssets.length}');
+        print('Unique asset names: ${_subAssetToParentMap.values.toSet().length}');
+        
+        // Check if there are more pages
+        if (response.pagination != null) {
+          totalPages = response.pagination!.pages;
+          print('Pagination info - Current page: ${response.pagination!.page}, Total pages: $totalPages, Total assets: ${response.pagination!.total}');
+          hasMorePages = currentPage < totalPages;
+          
+          print('Will fetch more pages? hasMorePages = $hasMorePages, currentPage = $currentPage, totalPages = $totalPages');
+        } else {
+          print('No pagination info available');
+          hasMorePages = false;
+        }
+        
+        // Increment page counter BEFORE next iteration
+        currentPage++;
+        print('Incremented currentPage to: $currentPage');
+        
+        // Safety check to prevent infinite loop
+        if (currentPage > 10) {
+          print('Safety limit reached. Stopping pagination.');
+          hasMorePages = false;
         }
       }
+      
+      print('Completed loading. Total sub-assets: ${allSubAssets.length}');
       
       setState(() {
         _allSubAssets = allSubAssets;
         _isLoading = false;
       });
+      
+      _filterAndPageAssets();
     } catch (e) {
+      print('Error loading sub-assets: $e');
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  void _filterAndPageAssets() {
+    List<dynamic> filtered = _allSubAssets;
+    
+    // Apply search filter
+    if (_searchController.text.isNotEmpty) {
+      final searchQuery = _searchController.text.toLowerCase();
+      filtered = filtered.where((subAsset) {
+        final name = subAsset.displayName?.toString().toLowerCase() ?? '';
+        final id = subAsset.displayId?.toString().toLowerCase() ?? '';
+        final status = subAsset.displayStatus?.toString().toLowerCase() ?? '';
+        final category = subAsset.category?.toString().toLowerCase() ?? '';
+        final brand = subAsset.brand?.toString().toLowerCase() ?? '';
+        
+        return name.contains(searchQuery) ||
+            id.contains(searchQuery) ||
+            status.contains(searchQuery) ||
+            category.contains(searchQuery) ||
+            brand.contains(searchQuery);
+      }).toList();
+    }
+    
+    // Apply asset name filter
+    if (_selectedAssetName != null && _selectedAssetName!.isNotEmpty) {
+      filtered = filtered.where((subAsset) {
+        final subAssetId = subAsset.id?.toString() ?? 
+                           subAsset.tagId?.toString() ?? 
+                           'unknown';
+        final parentAssetName = _subAssetToParentMap[subAssetId] ?? '';
+        return parentAssetName == _selectedAssetName;
+      }).toList();
+    }
+    
+    setState(() {
+      _filteredSubAssets = filtered;
+    });
   }
 
   @override
@@ -64,17 +179,10 @@ class _DashboardPageState extends State<DashboardPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF00BFFF),
-                    Color(0xFF87CEEB),
-                  ],
-                ),
+                color: Color(0xFF00BFFF),
                 borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
                 ),
               ),
               child: Column(
@@ -83,49 +191,39 @@ class _DashboardPageState extends State<DashboardPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          'Welcome, ${widget.userData['name']?.toString().toUpperCase() ?? 'USER'}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 25,
-                            backgroundColor: Colors.white,
-                            child: Text(
-                              widget.userData['name']?.toString().substring(0, 1).toUpperCase() ?? 'U',
-                              style: const TextStyle(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Asset Management',
+                              style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF00BFFF),
+                                color: Colors.white,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                           GestureDetector(
-                             onTap: () {
-                               // Navigate back to login page
-                               Navigator.of(context).pushReplacementNamed('/');
-                             },
-                             child: Container(
-                               padding: const EdgeInsets.all(8),
-                               decoration: BoxDecoration(
-                                 color: Colors.white.withOpacity(0.2),
-                                 borderRadius: BorderRadius.circular(8),
-                               ),
-                               child: const Icon(
-                                 Icons.logout,
-                                 color: Colors.white,
-                                 size: 20,
-                               ),
-                             ),
-                           ),
-                        ],
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Manage and track your assets',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.inventory_2,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                       ),
                     ],
                   ),
@@ -133,26 +231,157 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
 
+            // Search and Filter Section in Single Row
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search...',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFF999999),
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: Icon(
+                              Icons.search_rounded,
+                              color: Color(0xFF00BFFF),
+                              size: 20,
+                            ),
+                          ),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: DropdownButton<String?>(
+                        value: _selectedAssetName,
+                        isExpanded: true,
+                        isDense: false,
+                        underline: Container(),
+                        menuMaxHeight: 200,
+                        hint: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'All Assets',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF666666),
+                            ),
+                          ),
+                        ),
+                        icon: const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: Icon(
+                            Icons.arrow_drop_down_rounded,
+                            color: Color(0xFF00BFFF),
+                            size: 24,
+                          ),
+                        ),
+                        dropdownColor: Colors.white,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF1A1A1A),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('All Assets'),
+                            ),
+                          ),
+                          ..._assetNames.map((String name) {
+                            return DropdownMenuItem<String?>(
+                              value: name,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedAssetName = newValue;
+                          });
+                          _filterAndPageAssets();
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // Sub-Assets Content
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00BFFF)),
-                        ),
-                      )
-                    : _allSubAssets.isEmpty
-                        ? _buildEmptySubAssets()
-                        : ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: _allSubAssets.length,
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00BFFF)),
+                      ),
+                    )
+                  : _filteredSubAssets.isEmpty
+                      ? _buildEmptySubAssets()
+                      : RefreshIndicator(
+                          onRefresh: _loadAllSubAssets,
+                          color: const Color(0xFF00BFFF),
+                          child: ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                            itemCount: _filteredSubAssets.length,
                             itemBuilder: (context, index) {
-                              return _buildSubAssetCard(_allSubAssets[index]);
+                              return _buildSubAssetCard(_filteredSubAssets[index]);
                             },
                           ),
-              ),
+                        ),
             ),
 
           ],
@@ -375,19 +604,23 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'No Sub-Assets Found',
-            style: TextStyle(
+          Text(
+            _filteredSubAssets.isEmpty && _searchController.text.isNotEmpty
+                ? 'No Results Found'
+                : 'No Sub-Assets Found',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: Color(0xFF1A1A1A),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Sub-assets from main assets will appear here',
+          Text(
+            _filteredSubAssets.isEmpty && _searchController.text.isNotEmpty
+                ? 'Try different search terms'
+                : 'Sub-assets from main assets will appear here',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
               color: Color(0xFF666666),
             ),
@@ -396,5 +629,6 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
+
 }
 

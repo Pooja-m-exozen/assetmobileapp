@@ -7,12 +7,14 @@ class AssetResponse {
   final List<Asset> assets;
   final bool includeSubAssets;
   final SubAssetInfo? subAssetInfo;
+  final Pagination? pagination;
 
   AssetResponse({
     required this.success,
     required this.assets,
     required this.includeSubAssets,
     this.subAssetInfo,
+    this.pagination,
   });
 
   factory AssetResponse.fromJson(Map<String, dynamic> json) {
@@ -47,6 +49,32 @@ class AssetResponse {
       subAssetInfo: json['subAssetInfo'] != null 
           ? SubAssetInfo.fromJson(json['subAssetInfo']) 
           : null,
+      pagination: json['pagination'] != null 
+          ? Pagination.fromJson(json['pagination']) 
+          : null,
+    );
+  }
+}
+
+class Pagination {
+  final int page;
+  final int limit;
+  final int total;
+  final int pages;
+
+  Pagination({
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.pages,
+  });
+
+  factory Pagination.fromJson(Map<String, dynamic> json) {
+    return Pagination(
+      page: json['page'] ?? 1,
+      limit: json['limit'] ?? 10,
+      total: json['total'] ?? 0,
+      pages: json['pages'] ?? 1,
     );
   }
 }

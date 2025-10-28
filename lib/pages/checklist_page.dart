@@ -12,21 +12,14 @@ class ChecklistPage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Header Section (like dashboard)
+            // Header Section
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF00BFFF),
-                    Color(0xFF87CEEB),
-                  ],
-                ),
+                color: Color(0xFF00BFFF),
                 borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
                 ),
               ),
               child: Column(
