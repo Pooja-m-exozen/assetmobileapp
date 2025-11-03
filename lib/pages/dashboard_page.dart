@@ -69,22 +69,52 @@ class _DashboardPageState extends State<DashboardPage> {
         
         print('Page $currentPage: Received ${response.assets.length} main assets');
         
+        // Get user's project name for filtering
+        String? userProjectName = widget.userData['projectName']?.toString();
+        
         // Extract all sub-assets from this page and track parent asset names
         int subAssetsInPage = 0;
         for (var asset in response.assets) {
-          if (asset.subAssets?.immovable != null) {
-            final subAssets = asset.subAssets!.immovable!;
+          // Filter assets by project name if specified
+          if (userProjectName != null && userProjectName.isNotEmpty) {
+            if (asset.project?.projectName != userProjectName) {
+              print('Skipping asset ${asset.displayName} - Project mismatch: ${asset.project?.projectName}');
+              continue;
+            }
+          }
+          
+          if (asset.subAssets != null) {
             final parentAssetName = asset.assetName ?? 'Unknown';
-            
-            for (var subAsset in subAssets) {
+
+            // Collect immovable sub-assets (already typed)
+            final immovableSubAssets = asset.subAssets!.immovable ?? [];
+            for (var subAsset in immovableSubAssets) {
               allSubAssets.add(subAsset);
-              // Map sub-asset ID to parent asset name
-              final subAssetId = subAsset.id?.toString() ?? 
-                                 subAsset.tagId?.toString() ?? 
+              final subAssetId = subAsset.id?.toString() ??
+                                 subAsset.tagId?.toString() ??
                                  'unknown';
               _subAssetToParentMap[subAssetId] = parentAssetName;
             }
-            subAssetsInPage += subAssets.length;
+            subAssetsInPage += immovableSubAssets.length;
+
+            // Collect movable sub-assets (may be dynamic maps)
+            final movableRaw = asset.subAssets!.movable ?? [];
+            for (var item in movableRaw) {
+              dynamic parsed;
+              if (item is Map<String, dynamic>) {
+                parsed = SubAsset.fromJson(item);
+              } else if (item is SubAsset) {
+                parsed = item;
+              } else {
+                continue; // skip unknown types
+              }
+              allSubAssets.add(parsed);
+              final subAssetId = parsed.id?.toString() ??
+                                 parsed.tagId?.toString() ??
+                                 'unknown';
+              _subAssetToParentMap[subAssetId] = parentAssetName;
+              subAssetsInPage += 1;
+            }
           }
         }
         
@@ -241,7 +271,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.04),
@@ -286,7 +316,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.04),
@@ -300,6 +330,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         isExpanded: true,
                         isDense: false,
                         underline: Container(),
+                        borderRadius: BorderRadius.circular(20),
                         menuMaxHeight: 200,
                         hint: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 12),

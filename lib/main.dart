@@ -586,7 +586,7 @@ class _MainAppState extends State<MainApp> {
     const SizedBox(), // Placeholder, will be replaced
     const SizedBox(), // AssetPage placeholder, will be replaced
     const ScannerPage(),
-    const ChecklistPage(),
+    const SizedBox(), // ChecklistPage placeholder, will be replaced
     const SizedBox(), // ProfilePage placeholder, will be replaced
   ];
 
@@ -598,6 +598,7 @@ class _MainAppState extends State<MainApp> {
     // Initialize pages with user data
     _pages[0] = AssetPage(userData: widget.userData, isViewerMode: false);
     _pages[1] = DashboardPage(userData: widget.userData);
+    _pages[3] = ChecklistPage(userData: widget.userData);
     _pages[4] = ProfilePage(userData: widget.userData);
   }
 
